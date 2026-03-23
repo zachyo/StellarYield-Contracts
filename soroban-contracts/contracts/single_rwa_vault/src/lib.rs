@@ -699,6 +699,8 @@ impl SingleRWAVault {
 
     pub fn transfer(e: &Env, from: Address, to: Address, amount: i128) {
         from.require_auth();
+        require_not_blacklisted(e, &from);
+        require_not_blacklisted(e, &to);
         update_user_snapshot(e, &from);
         update_user_snapshot(e, &to);
         spend_share_balance(e, &from, amount);
