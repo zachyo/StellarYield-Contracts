@@ -473,6 +473,9 @@ impl SingleRWAVault {
     ) -> i128 {
         caller.require_auth();
         require_not_paused(e);
+        require_not_blacklisted(e, &caller);
+        require_not_blacklisted(e, &owner);
+        require_not_blacklisted(e, &receiver);
         require_state(e, VaultState::Matured);
 
         if caller != owner {
