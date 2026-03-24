@@ -12,4 +12,6 @@ pub enum Error {
     VaultIsActive      = 4,
     /// Requested operation is not supported.
     NotSupported       = 5,
+    /// Invalid initialization parameters provided.
+    InvalidInitParams  = 6,
 }

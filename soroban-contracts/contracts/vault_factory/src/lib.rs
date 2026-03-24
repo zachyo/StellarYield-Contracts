@@ -336,6 +336,27 @@ impl VaultFactory {
         max_deposit_per_user: i128,
         early_redemption_fee_bps: u32,
     ) -> Address {
+        // --- Validation ---
+        if asset == e.current_contract_address() {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if maturity_date <= e.ledger().timestamp() {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if early_redemption_fee_bps > 1000 {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if min_deposit < 0 || funding_target < 0 {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if min_deposit > 0
+            && max_deposit_per_user > 0
+            && max_deposit_per_user < min_deposit
+        {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+
+        // --- Execution ---
         // Resolve asset
         let vault_asset = if asset == get_default_asset(e) || asset == e.current_contract_address() {
             // treat "self" as "use default"

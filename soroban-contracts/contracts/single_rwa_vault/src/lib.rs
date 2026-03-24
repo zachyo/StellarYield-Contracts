@@ -36,6 +36,27 @@ impl SingleRWAVault {
     /// Parameters are grouped into an `InitParams` struct because Soroban
     /// enforces a maximum of 10 arguments per contract function.
     pub fn __constructor(e: &Env, params: InitParams) {
+        // --- Validation ---
+        if params.share_decimals > 18 {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if params.maturity_date <= e.ledger().timestamp() {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if params.early_redemption_fee_bps > 1000 {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if params.min_deposit < 0 || params.funding_target < 0 {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+        if params.min_deposit > 0
+            && params.max_deposit_per_user > 0
+            && params.max_deposit_per_user < params.min_deposit
+        {
+            panic_with_error!(e, Error::InvalidInitParams);
+        }
+
+        // --- Effects ---
         // Share token metadata (SEP-41 compatible storage)
         put_share_name(e, params.share_name);
         put_share_symbol(e, params.share_symbol);
@@ -1490,6 +1511,6 @@ mod test_redemption;
 mod test_access_control;
 
 #[cfg(test)]
-mod test_vault_state_guards;
+mod test_constructor_validation;
 #[cfg(test)]
 mod test_token;

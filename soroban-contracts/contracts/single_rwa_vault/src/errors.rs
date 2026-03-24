@@ -41,4 +41,6 @@ pub enum Error {
     InvalidRedemptionRequest = 24,
     /// Operation or component is not supported.
     NotSupported = 25,
+    /// Invalid initialization parameters provided to the constructor.
+    InvalidInitParams = 26,
 }
