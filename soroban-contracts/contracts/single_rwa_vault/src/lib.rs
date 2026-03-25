@@ -161,7 +161,8 @@ impl SingleRWAVault {
 
     pub fn set_zkme_verifier(e: &Env, caller: Address, verifier: Address) {
         caller.require_auth();
-        require_admin(e, &caller);
+        // ComplianceOfficer role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::ComplianceOfficer);
         let old = get_zkme_verifier(e);
         put_zkme_verifier(e, verifier.clone());
         emit_zkme_verifier_updated(e, old, verifier);
@@ -170,7 +171,8 @@ impl SingleRWAVault {
 
     pub fn set_cooperator(e: &Env, caller: Address, new_cooperator: Address) {
         caller.require_auth();
-        require_admin(e, &caller);
+        // ComplianceOfficer role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::ComplianceOfficer);
         let old = get_cooperator(e);
         put_cooperator(e, new_cooperator.clone());
         emit_cooperator_updated(e, old, new_cooperator);
@@ -482,7 +484,8 @@ impl SingleRWAVault {
         // --- Checks ---
         acquire_lock(e);
         require_not_paused(e);
-        require_operator(e, &caller);
+        // YieldOperator role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::YieldOperator);
         require_state(e, VaultState::Active);
 
         if amount <= 0 {
@@ -624,7 +627,8 @@ impl SingleRWAVault {
 
     pub fn activate_vault(e: &Env, operator: Address) {
         operator.require_auth();
-        require_operator(e, &operator);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &operator, Role::LifecycleManager);
         require_state(e, VaultState::Funding);
         // Cannot activate once the funding deadline has passed.
         let deadline = get_funding_deadline(e);
@@ -647,7 +651,8 @@ impl SingleRWAVault {
     /// Transitions the vault to Cancelled, enabling individual `refund` calls.
     pub fn cancel_funding(e: &Env, caller: Address) {
         caller.require_auth();
-        require_operator(e, &caller);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::LifecycleManager);
         require_state(e, VaultState::Funding);
         // Deadline must have passed.
         let deadline = get_funding_deadline(e);
@@ -709,7 +714,8 @@ impl SingleRWAVault {
     /// Transition Active → Matured.  Requires block timestamp ≥ maturityDate.
     pub fn mature_vault(e: &Env, caller: Address) {
         caller.require_auth();
-        require_operator(e, &caller);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::LifecycleManager);
         require_state(e, VaultState::Active);
         let now = e.ledger().timestamp();
         if now < get_maturity_date(e) {
@@ -726,7 +732,8 @@ impl SingleRWAVault {
     /// Closed is a terminal state; no further operations are possible.
     pub fn close_vault(e: &Env, caller: Address) {
         caller.require_auth();
-        require_operator(e, &caller);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::LifecycleManager);
         require_state(e, VaultState::Matured);
 
         if get_total_supply(e) > 0 {
@@ -740,7 +747,8 @@ impl SingleRWAVault {
 
     pub fn set_maturity_date(e: &Env, caller: Address, timestamp: u64) {
         caller.require_auth();
-        require_operator(e, &caller);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::LifecycleManager);
         require_not_closed(e);
         put_maturity_date(e, timestamp);
         emit_maturity_date_set(e, timestamp);
@@ -781,7 +789,8 @@ impl SingleRWAVault {
 
     pub fn set_deposit_limits(e: &Env, caller: Address, min_amount: i128, max_amount: i128) {
         caller.require_auth();
-        require_operator(e, &caller);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::LifecycleManager);
         put_min_deposit(e, min_amount);
         put_max_deposit_per_user(e, max_amount);
         emit_deposit_limits_updated(e, min_amount, max_amount);
@@ -917,7 +926,8 @@ impl SingleRWAVault {
         operator.require_auth();
         // --- Checks ---
         acquire_lock(e);
-        require_operator(e, &operator);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &operator, Role::LifecycleManager);
 
         let mut req = get_redemption_request(e, request_id);
         if req.processed {
@@ -988,7 +998,8 @@ impl SingleRWAVault {
     /// Operator rejects an early redemption request and returns shares from escrow.
     pub fn reject_early_redemption(e: &Env, operator: Address, request_id: u32) {
         operator.require_auth();
-        require_operator(e, &operator);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &operator, Role::LifecycleManager);
 
         let mut req = get_redemption_request(e, request_id);
         if req.processed {
@@ -1023,7 +1034,8 @@ impl SingleRWAVault {
     /// Set the early redemption fee (only by operator).
     pub fn set_early_redemption_fee(e: &Env, operator: Address, fee_bps: u32) {
         operator.require_auth();
-        require_operator(e, &operator);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &operator, Role::LifecycleManager);
         require_not_closed(e);
         if fee_bps > 1000 {
             panic_with_error!(e, Error::FeeTooHigh);
@@ -1041,16 +1053,49 @@ impl SingleRWAVault {
         get_admin(e)
     }
 
-    pub fn is_operator(e: &Env, account: Address) -> bool {
-        get_operator(e, &account)
+    /// Grant `role` to `addr`.  Only the admin may grant roles.
+    ///
+    /// `FullOperator` is the backward-compatible superrole and passes every
+    /// role check — equivalent to the old `set_operator(..., true)`.
+    pub fn grant_role(e: &Env, caller: Address, addr: Address, role: Role) {
+        caller.require_auth();
+        require_admin(e, &caller);
+        put_role(e, addr.clone(), role.clone(), true);
+        emit_role_granted(e, addr, role);
+        bump_instance(e);
     }
 
+    /// Revoke `role` from `addr`.  Only the admin may revoke roles.
+    pub fn revoke_role(e: &Env, caller: Address, addr: Address, role: Role) {
+        caller.require_auth();
+        require_admin(e, &caller);
+        put_role(e, addr.clone(), role.clone(), false);
+        emit_role_revoked(e, addr, role);
+        bump_instance(e);
+    }
+
+    /// Returns `true` when `addr` holds `role`, the `FullOperator` superrole,
+    /// or is the admin.
+    pub fn has_role(e: &Env, addr: Address, role: Role) -> bool {
+        if addr == get_admin(e) {
+            return true;
+        }
+        get_role(e, &addr, Role::FullOperator) || get_role(e, &addr, role)
+    }
+
+    /// Backward-compatible: grants or revokes the `FullOperator` superrole.
+    /// Prefer `grant_role` / `revoke_role` for new integrations.
     pub fn set_operator(e: &Env, caller: Address, operator: Address, status: bool) {
         caller.require_auth();
         require_admin(e, &caller);
         put_operator(e, operator.clone(), status);
         emit_operator_updated(e, operator, status);
         bump_instance(e);
+    }
+
+    /// Backward-compatible: returns `true` when `account` holds `FullOperator`.
+    pub fn is_operator(e: &Env, account: Address) -> bool {
+        get_operator(e, &account)
     }
 
     pub fn transfer_admin(e: &Env, caller: Address, new_admin: Address) {
@@ -1068,7 +1113,8 @@ impl SingleRWAVault {
 
     pub fn set_blacklisted(e: &Env, caller: Address, address: Address, status: bool) {
         caller.require_auth();
-        require_admin(e, &caller);
+        // ComplianceOfficer role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::ComplianceOfficer);
         put_blacklisted(e, &address, status);
         emit_address_blacklisted(e, address, status);
         bump_instance(e);
@@ -1090,7 +1136,8 @@ impl SingleRWAVault {
     /// Toggle the transfer KYC requirement.  Only the admin may change this.
     pub fn set_transfer_requires_kyc(e: &Env, caller: Address, enabled: bool) {
         caller.require_auth();
-        require_admin(e, &caller);
+        // ComplianceOfficer role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::ComplianceOfficer);
         put_transfer_requires_kyc(e, enabled);
         bump_instance(e);
     }
@@ -1101,7 +1148,8 @@ impl SingleRWAVault {
 
     pub fn pause(e: &Env, caller: Address, reason: String) {
         caller.require_auth();
-        require_operator(e, &caller);
+        // TreasuryManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::TreasuryManager);
         put_paused(e, true);
         emit_emergency_action(e, true, reason);
         bump_instance(e);
@@ -1133,7 +1181,8 @@ impl SingleRWAVault {
         caller.require_auth();
         // --- Checks ---
         acquire_lock(e);
-        require_admin(e, &caller);
+        // TreasuryManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::TreasuryManager);
 
         let balance = asset_balance_of_vault(e);
 
@@ -1204,7 +1253,8 @@ impl SingleRWAVault {
     }
     pub fn set_funding_target(e: &Env, caller: Address, target: i128) {
         caller.require_auth();
-        require_operator(e, &caller);
+        // LifecycleManager role required — also passes for FullOperator and admin.
+        require_role(e, &caller, Role::LifecycleManager);
         put_funding_target(e, target);
         emit_funding_target_set(e, target);
         bump_instance(e);
@@ -1447,8 +1497,20 @@ fn require_admin(e: &Env, caller: &Address) {
     }
 }
 
-fn require_operator(e: &Env, caller: &Address) {
-    if !get_operator(e, caller) && *caller != get_admin(e) {
+/// Passes when `caller` holds `role`, the `FullOperator` superrole, or is admin.
+///
+/// Role hierarchy (most to least privileged):
+/// - Admin → always authorised
+/// - FullOperator → backward-compatible superrole; passes every role check
+/// - Named role → passes only the matching role check
+fn require_role(e: &Env, caller: &Address, role: Role) {
+    if *caller == get_admin(e) {
+        return;
+    }
+    if get_role(e, caller, Role::FullOperator) {
+        return;
+    }
+    if !get_role(e, caller, role) {
         panic_with_error!(e, Error::NotOperator);
     }
 }
@@ -1682,6 +1744,8 @@ mod test_constructor;
 mod test_escrow;
 #[cfg(test)]
 pub mod test_helpers;
+#[cfg(test)]
+mod test_rbac;
 #[cfg(test)]
 mod test_redemption;
 #[cfg(test)]

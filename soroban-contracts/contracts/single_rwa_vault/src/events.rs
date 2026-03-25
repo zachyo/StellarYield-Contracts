@@ -4,7 +4,7 @@
 
 use soroban_sdk::{symbol_short, Address, Env, String};
 
-use crate::types::VaultState;
+use crate::types::{Role, VaultState};
 
 pub fn emit_zkme_verifier_updated(e: &Env, old: Address, new: Address) {
     e.events().publish((symbol_short!("zkme_upd"),), (old, new));
@@ -39,6 +39,16 @@ pub fn emit_deposit_limits_updated(e: &Env, min: i128, max: i128) {
 pub fn emit_operator_updated(e: &Env, operator: Address, status: bool) {
     e.events()
         .publish((symbol_short!("op_upd"), operator), status);
+}
+
+/// Emitted when the admin grants a role to an address.
+pub fn emit_role_granted(e: &Env, addr: Address, role: Role) {
+    e.events().publish((symbol_short!("role_grt"), addr), role);
+}
+
+/// Emitted when the admin revokes a role from an address.
+pub fn emit_role_revoked(e: &Env, addr: Address, role: Role) {
+    e.events().publish((symbol_short!("role_rvk"), addr), role);
 }
 
 pub fn emit_emergency_action(e: &Env, paused: bool, reason: String) {

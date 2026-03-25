@@ -254,19 +254,17 @@ fn test_emergency_withdraw_drains_vault() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #4)")] // Error::NotAdmin = 4
+#[should_panic(expected = "Error(Contract, #3)")] // Error::NotOperator = 3
 fn test_emergency_withdraw_non_admin_panics() {
     let e = Env::default();
     e.mock_all_auths();
-    let (vault_id, _, _, admin) = make_vault(&e);
+    let (vault_id, _, _, _admin) = make_vault(&e);
     let vault = SingleRWAVaultClient::new(&e, &vault_id);
-    let operator = Address::generate(&e);
+    // An address with no role — not TreasuryManager, FullOperator, or admin.
+    let nobody = Address::generate(&e);
     let recipient = Address::generate(&e);
 
-    vault.set_operator(&admin, &operator, &true);
-
-    // Operator (non-admin) tries to call emergency withdraw
-    vault.emergency_withdraw(&operator, &recipient);
+    vault.emergency_withdraw(&nobody, &recipient);
 }
 
 #[test]
