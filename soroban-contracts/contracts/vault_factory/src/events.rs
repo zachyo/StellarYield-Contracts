@@ -51,7 +51,8 @@ pub fn emit_role_granted(e: &Env, addr: Address, role: Role) {
 
 /// Emitted by `migrate` — storage schema upgraded.
 pub fn emit_data_migrated(e: &Env, old_version: u32, new_version: u32) {
-    e.events().publish((symbol_short!("data_mig"), old_version, new_version), ());
+    e.events()
+        .publish((symbol_short!("data_mig"), old_version, new_version), ());
 }
 
 /// Emitted when the admin revokes a role from an address.

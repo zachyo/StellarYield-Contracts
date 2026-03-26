@@ -8,12 +8,9 @@
 //!
 //! The current version is defined by CURRENT_SCHEMA_VERSION in lib.rs.
 
-use soroban_sdk::{Address, Env};
+use soroban_sdk::Env;
 
-use crate::storage::{
-    bump_instance, put_storage_schema_version, DataKey, put_total_deposited, put_total_supply,
-};
-use crate::types::VaultState;
+use crate::storage::{bump_instance, put_storage_schema_version};
 
 /// Current storage schema version of this contract code.
 /// Increment this value when any breaking storage change is introduced.

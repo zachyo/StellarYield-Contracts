@@ -9,9 +9,9 @@ mod types;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod test_factory_migration;
+#[cfg(test)]
+mod tests;
 
 pub use crate::types::*;
 
@@ -20,8 +20,8 @@ use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env
 
 use crate::errors::Error;
 use crate::events::*;
-use crate::storage::*;
 use crate::migrations::CURRENT_SCHEMA_VERSION;
+use crate::storage::*;
 
 /// Maximum number of vaults that can be created in a single batch call.
 /// Contract deployment is one of the most expensive Soroban operations;

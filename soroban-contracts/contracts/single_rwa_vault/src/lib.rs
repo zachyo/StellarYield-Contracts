@@ -11,13 +11,13 @@ mod types;
 #[cfg(test)]
 mod fuzz_tests;
 #[cfg(test)]
-mod test_funding_deadline;
-#[cfg(test)]
-mod test_lifecycle;
+mod test_burn_yield_accounting;
 #[cfg(test)]
 mod test_convert_erc4626;
 #[cfg(test)]
-mod test_burn_yield_accounting;
+mod test_funding_deadline;
+#[cfg(test)]
+mod test_lifecycle;
 
 pub use crate::types::*;
 
@@ -25,9 +25,9 @@ use soroban_sdk::{contract, contractimpl, panic_with_error, token, Address, Env,
 
 use crate::errors::Error;
 use crate::events::*;
+use crate::migrations::CURRENT_SCHEMA_VERSION;
 use crate::storage::*;
 use crate::token_interface::*;
-use crate::migrations::CURRENT_SCHEMA_VERSION;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Contract struct
@@ -41,7 +41,8 @@ impl SingleRWAVault {
     pub const FREEZE_DEPOSIT_MINT: u32 = 1;
     pub const FREEZE_WITHDRAW_REDEEM: u32 = 2;
     pub const FREEZE_YIELD: u32 = 4;
-    pub const FREEZE_ALL: u32 = Self::FREEZE_DEPOSIT_MINT | Self::FREEZE_WITHDRAW_REDEEM | Self::FREEZE_YIELD;
+    pub const FREEZE_ALL: u32 =
+        Self::FREEZE_DEPOSIT_MINT | Self::FREEZE_WITHDRAW_REDEEM | Self::FREEZE_YIELD;
 
     // ─────────────────────────────────────────────────────────────────
     // Constructor
@@ -1802,12 +1803,6 @@ fn require_role(e: &Env, caller: &Address, role: Role) {
     }
     if !get_role(e, caller, role) {
         panic_with_error!(e, Error::NotOperator);
-    }
-}
-
-fn require_not_paused(e: &Env) {
-    if get_paused(e) {
-        panic_with_error!(e, Error::VaultPaused);
     }
 }
 

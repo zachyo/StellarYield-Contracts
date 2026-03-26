@@ -74,7 +74,10 @@ fn test_burn_from_auto_claims_pending_yield() {
     assert_eq!(vault.pending_yield(&user), 0);
     // Verify remaining shares and allowance
     assert_eq!(vault.balance(&user), shares_before - burn_amount);
-    assert_eq!(vault.allowance(&user, &spender), shares_before - burn_amount);
+    assert_eq!(
+        vault.allowance(&user, &spender),
+        shares_before - burn_amount
+    );
 }
 
 #[test]
