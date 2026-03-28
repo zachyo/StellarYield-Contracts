@@ -537,3 +537,93 @@ fn test_batch_create_vaults_at_limit_ok() {
         );
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #214 — Forward-looking: mixed vault types (SingleRwa + Aggregator)
+//
+// The Aggregator vault type is already declared in VaultType but not yet
+// deployable through the factory.  This test documents the *desired* registry
+// behaviour once Aggregator vaults are supported:
+//
+//   • get_all_vaults()    → returns every vault regardless of type
+//   • get_active_vaults() → returns every active vault regardless of type
+//   • get_single_rwa_vaults() — SingleRwa list must NOT include Aggregator entries
+//
+// The test is marked #[ignore] so it does not block CI until the Aggregator
+// vault type is fully implemented.  Remove the #[ignore] attribute and fill in
+// the deployment call once create_aggregator_vault (or equivalent) is added to
+// the factory.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Forward-looking test: registry correctly separates SingleRwa and Aggregator
+/// vault types when both exist side-by-side.
+///
+/// Marked #[ignore] — Aggregator deployment is not yet implemented in the
+/// factory.  This test serves as a specification stub that compiles cleanly and
+/// will be activated once the feature lands.
+#[test]
+#[ignore]
+fn test_mixed_vault_types_registry_filtering() {
+    let e = Env::default();
+    e.mock_all_auths();
+
+    let (client, _admin) = setup_factory(&e);
+    let factory_id = client.address.clone();
+
+    // Inject a SingleRwa vault directly (active).
+    let single_rwa_vault = inject_vault(&e, &factory_id, true);
+
+    // Inject a stub Aggregator vault entry directly into the registry.
+    // TODO: replace this manual injection with a real factory call once
+    //       `create_aggregator_vault` is implemented.
+    let aggregator_vault = Address::generate(&e);
+    let aggregator_info = crate::types::VaultInfo {
+        vault: aggregator_vault.clone(),
+        asset: Address::generate(&e),
+        vault_type: crate::types::VaultType::Aggregator,
+        name: String::from_str(&e, "Aggregator Vault"),
+        symbol: String::from_str(&e, "AGG"),
+        active: true,
+        created_at: e.ledger().timestamp(),
+    };
+    e.as_contract(&factory_id, || {
+        put_vault_info(&e, &aggregator_vault, aggregator_info);
+        push_all_vaults(&e, aggregator_vault.clone());
+        push_active_vaults(&e, aggregator_vault.clone());
+        // Intentionally NOT pushed to SingleRwaVaults list.
+    });
+
+    // ── get_all_vaults returns both types ─────────────────────────────────────
+    let all = client.get_all_vaults();
+    assert_eq!(all.len(), 2, "get_all_vaults must return both vault types");
+    assert!(all.contains(single_rwa_vault.clone()), "all vaults must include SingleRwa vault");
+    assert!(all.contains(aggregator_vault.clone()), "all vaults must include Aggregator vault");
+
+    // ── get_active_vaults returns both active entries ─────────────────────────
+    let active = client.get_active_vaults();
+    assert_eq!(active.len(), 2, "get_active_vaults must return all active vaults");
+
+    // ── SingleRwa-specific list must not include the Aggregator vault ─────────
+    e.as_contract(&factory_id, || {
+        let single_rwa_list = get_single_rwa_vaults(&e);
+        assert!(
+            single_rwa_list.contains(single_rwa_vault.clone()),
+            "SingleRwaVaults list must contain the SingleRwa vault"
+        );
+        assert!(
+            !single_rwa_list.contains(aggregator_vault.clone()),
+            "SingleRwaVaults list must NOT contain the Aggregator vault"
+        );
+    });
+
+    // ── VaultInfo.vault_type discriminates correctly ───────────────────────────
+    let single_info = client
+        .get_vault_info(&single_rwa_vault)
+        .expect("SingleRwa VaultInfo must exist");
+    assert_eq!(single_info.vault_type, crate::types::VaultType::SingleRwa);
+
+    let agg_info = client
+        .get_vault_info(&aggregator_vault)
+        .expect("Aggregator VaultInfo must exist");
+    assert_eq!(agg_info.vault_type, crate::types::VaultType::Aggregator);
+}
