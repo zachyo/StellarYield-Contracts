@@ -696,3 +696,151 @@ fn test_mixed_vault_types_registry_filtering() {
         .expect("Aggregator VaultInfo must exist");
     assert_eq!(agg_info.vault_type, crate::types::VaultType::Aggregator);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #211 — Large-registry sanity check (performance)
+//
+// Creating a relatively large number of vaults (e.g., 30–50) serves as a
+// sanity check for registry behavior under load.  This is not a formal
+// performance benchmark — it just verifies that queries still return correct
+// results and that gas usage stays within test-budget limits.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Create dozens of vaults and verify that registry queries still behave
+/// correctly.  The test uses `inject_vault` (direct storage writes) to avoid
+/// the cost of real contract deployments, focusing purely on registry logic.
+#[test]
+fn test_large_registry_sanity() {
+    let e = Env::default();
+    e.mock_all_auths();
+
+    let (client, _admin) = setup_factory(&e);
+    let factory_id = client.address.clone();
+
+    let total_vaults: u32 = 40;
+    let active_vaults: u32 = 25;
+    let inactive_vaults = total_vaults - active_vaults;
+
+    let mut all_addresses: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(&e);
+    let mut active_addresses: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(&e);
+
+    // Create a mix of active and inactive vaults.
+    for i in 0..total_vaults {
+        let is_active = i < active_vaults;
+        let vault = inject_vault(&e, &factory_id, is_active);
+        all_addresses.push_back(vault.clone());
+        if is_active {
+            active_addresses.push_back(vault);
+        }
+    }
+
+    // ── get_vault_count ────────────────────────────────────────────────────
+    assert_eq!(
+        client.get_vault_count(),
+        total_vaults,
+        "vault count should match total created"
+    );
+
+    // ── get_all_vaults ─────────────────────────────────────────────────────
+    let all = client.get_all_vaults();
+    assert_eq!(
+        all.len(),
+        total_vaults,
+        "get_all_vaults should return all vaults"
+    );
+    for i in 0..total_vaults {
+        assert!(
+            all.contains(all_addresses.get(i).unwrap()),
+            "all vaults list must contain vault {}",
+            i
+        );
+    }
+
+    // ── get_active_vaults ──────────────────────────────────────────────────
+    let active = client.get_active_vaults();
+    assert_eq!(
+        active.len(),
+        active_vaults,
+        "get_active_vaults should return only active vaults"
+    );
+    for i in 0..active_vaults {
+        assert!(
+            active.contains(active_addresses.get(i).unwrap()),
+            "active vaults list must contain active vault {}",
+            i
+        );
+    }
+
+    // ── get_vaults_paginated ───────────────────────────────────────────────
+    let page_size: u32 = 10;
+    let mut collected: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(&e);
+    let mut offset: u32 = 0;
+    loop {
+        let page = client.get_vaults_paginated(&offset, &page_size);
+        if page.is_empty() {
+            break;
+        }
+        for j in 0..page.len() {
+            collected.push_back(page.get(j).unwrap());
+        }
+        offset += page_size;
+    }
+    assert_eq!(
+        collected.len(),
+        total_vaults,
+        "paginated traversal should collect all vaults"
+    );
+    // Verify order matches get_all_vaults.
+    let all_again = client.get_all_vaults();
+    for i in 0..total_vaults {
+        assert_eq!(
+            collected.get(i).unwrap(),
+            all_again.get(i).unwrap(),
+            "paginated order must match get_all_vaults order"
+        );
+    }
+
+    // ── get_active_vaults_paginated ────────────────────────────────────────
+    let mut collected_active: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(&e);
+    offset = 0;
+    loop {
+        let page = client.get_active_vaults_paginated(&offset, &page_size);
+        if page.is_empty() {
+            break;
+        }
+        for j in 0..page.len() {
+            collected_active.push_back(page.get(j).unwrap());
+        }
+        offset += page_size;
+    }
+    assert_eq!(
+        collected_active.len(),
+        active_vaults,
+        "paginated active traversal should collect all active vaults"
+    );
+
+    // ── get_vault_info for random vaults ───────────────────────────────────
+    let first_info = client
+        .get_vault_info(&all_addresses.get(0).unwrap())
+        .expect("first vault info must exist");
+    assert!(first_info.active, "first vault should be active");
+
+    let last_info = client
+        .get_vault_info(&all_addresses.get(total_vaults - 1).unwrap())
+        .expect("last vault info must exist");
+    assert!(
+        !last_info.active,
+        "last vault should be inactive"
+    );
+
+    // ── is_registered_vault ────────────────────────────────────────────────
+    assert!(
+        client.is_registered_vault(&all_addresses.get(0).unwrap()),
+        "registered vault should return true"
+    );
+    let ghost = Address::generate(&e);
+    assert!(
+        !client.is_registered_vault(&ghost),
+        "non-existent vault should return false"
+    );
+}
